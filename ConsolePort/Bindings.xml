@@ -24,6 +24,8 @@
 	<Binding name="CP_T1" header="CP_TRIG" category="ConsolePort "/>
 	<Binding name="CP_T2" header="CP_TRIG" category="ConsolePort "/>
 
+    <Binding name="CLICK ConsolePortRaidCursorEasyMotionStart:LeftButton"/>
+
 	<!-- Custom bindings -->
 	<Binding name="WM_UPDATE" hidden="true">
 		ConsolePort:WMupdate()

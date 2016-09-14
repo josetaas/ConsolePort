@@ -21,6 +21,10 @@ local Key = {
 	Down 	= ConsolePort:GetUIControlKey("CP_L_DOWN"),
 	Left 	= ConsolePort:GetUIControlKey("CP_L_LEFT"),
 	Right 	= ConsolePort:GetUIControlKey("CP_L_RIGHT"),
+	RUp		= ConsolePort:GetUIControlKey("CP_R_UP"),
+	RDown 	= ConsolePort:GetUIControlKey("CP_R_DOWN"),
+	RLeft 	= ConsolePort:GetUIControlKey("CP_R_LEFT"),
+	RRight 	= ConsolePort:GetUIControlKey("CP_R_RIGHT"),
 }
 ---------------------------------------------------------------
 local SetFocus = CreateFrame("Button", "$parentFocus", Cursor, "SecureActionButtonTemplate")
@@ -35,12 +39,18 @@ ConsolePort:RegisterSpellHeader(Cursor)
 Cursor:Execute(format([[
 	ALL = newtable()
 	DPAD = newtable()
+	RKEY = newtable()
 
 	Key = newtable()
 	Key.Up = %s
 	Key.Down = %s
 	Key.Left = %s
 	Key.Right = %s
+
+	Key.RUp = %s
+	Key.RDown = %s
+	Key.RLeft = %s
+	Key.RRight = %s
 
 	ID = 0
 
@@ -61,7 +71,8 @@ Cursor:Execute(format([[
 
 	Helpful = newtable()
 	Harmful = newtable()
-]], Key.Up, Key.Down, Key.Left, Key.Right))
+]], Key.Up, Key.Down, Key.Left, Key.Right,
+    Key.RUp, Key.RDown, Key.RLeft, Key.RRight))
 
 -- Raid cursor run snippets
 ---------------------------------------------------------------
@@ -293,6 +304,202 @@ Cursor:Execute([[
 		end
 	]=]
 ]])
+
+-- easy motion run snippets
+---------------------------------------------------------------
+Cursor:Execute([[
+    EasyMotionInputStart = [=[
+        EasyMotionCurrentInput = nil
+
+        for binding, name in pairs(RKEY) do
+            local key = GetBindingKey(binding)
+            self:SetBindingClick(true, key, "ConsolePortRaidCursorButton"..name)
+        end
+
+        if (EasyMotionFrameLookupTable) then
+            for binding, frame in pairs(EasyMotionFrameLookupTable) do
+                self:CallMethod('EasyMotionDisplay',
+                                frame:GetName(), binding)
+            end
+        end
+    ]=]
+    EasyMotionInputStop = [=[
+        local frame
+        if (EasyMotionFrameLookupTable) then
+            frame = EasyMotionFrameLookupTable[EasyMotionCurrentInput]
+        else
+            return nil
+        end
+
+        if frame then
+            current = frame
+
+            self:Show()
+
+			local unit = current:GetAttribute("unit")
+
+			Focus:SetAttribute("unit", unit)
+			Target:SetAttribute("unit", unit)
+
+			RegisterStateDriver(self, "unitexists", "[@"..unit..",exists,nodead] true; nil")
+
+			self:ClearAllPoints()
+			self:SetPoint("TOPLEFT", current, "CENTER", 0, 0)
+			self:SetAttribute("node", current)
+			self:SetAttribute("unit", unit)
+			
+			if not UnitIsDead(unit) then
+				if PlayerCanAttack(unit) then
+					self:SetAttribute("relation", "harm")
+					for action in pairs(Harmful) do
+						action:SetAttribute("unit", unit)
+					end
+				elseif PlayerCanAssist(unit) then
+					self:SetAttribute("relation", "help")
+					for action in pairs(Helpful) do
+						action:SetAttribute("unit", unit)
+					end
+				end
+			end
+        end
+
+        for binding, name in pairs(RKEY) do
+            local key = GetBindingKey(binding)
+            self:ClearBinding(key)
+        end
+
+        for binding, frame in pairs(EasyMotionFrameLookupTable) do
+            self:CallMethod('EasyMotionHide', frame:GetName())
+        end
+    ]=]
+    EasyMotionInput = [=[
+        key = ...
+
+        if not EasyMotionCurrentInput then
+            EasyMotionCurrentInput = key
+        else
+            EasyMotionCurrentInput = EasyMotionCurrentInput .. ' ' .. key
+        end
+
+        self:CallMethod('EasyMotionFilter', EasyMotionCurrentInput)
+    ]=]
+    EasyMotionCreateBindings = [=[
+        EasyMotionBindings = newtable()
+
+        local MAX = 64
+        local keys = newtable(Key.RUp, Key.RLeft, Key.RDown, Key.RRight)
+        local current = 1
+
+        for _, key in pairs(keys) do
+            EasyMotionBindings[current] = key
+            current = current + 1
+        end
+
+        for _, key1 in pairs(keys) do
+            for _, key2 in pairs(keys) do
+                EasyMotionBindings[current] = key2 .. ' ' .. key1
+                current = current + 1
+            end
+        end
+
+        for _, key1 in pairs(keys) do
+            for _, key2 in pairs(keys) do
+                for _, key3 in pairs(keys) do
+                    EasyMotionBindings[current] = key2 .. ' ' .. key2 .. ' ' .. key1
+                    current = current + 1
+
+                    if (current > MAX) then
+                        return
+                    end
+                end
+            end
+        end
+    ]=]
+    EasyMotionSetStartNode = [=[
+        local this, left, bottom, width, height, name
+        local thisX, thisY, destX, destY, dist, destDistance
+        thisX, thisY = 0, 10000
+        for frame in pairs(Units) do
+            name = frame:GetAttribute('unit')
+            if (frame:IsVisible()) then
+                if (strmatch(name, 'raid')) then
+                    left, bottom, width, height = frame:GetRect()
+                    destX, destY = left+width/2, bottom+height/2
+                    destDistance = abs(thisX - destX) + abs(thisY - destY)
+
+                    if not dist or destDistance < dist then
+                        this = frame
+                        dist = destDistance
+                    end
+                end
+            end
+        end
+
+        EasyMotionCurrentNode = this
+    ]=]
+    EasyMotionAssignBindings = [=[
+        local last, oldStart, newStart, binding, count, name
+        count = ...
+        if not count then
+            count = 1
+        end
+
+        if not EasyMotionInitialized then
+            EasyMotionFrameLookupTable = newtable()
+            EasyMotionBindingLookupTable = newtable()
+            EasyMotionInitialized = true
+        end
+
+        if not IsEnabled then
+            EasyMotionCurrentNode = false
+            EasyMotionInitialized = false
+            return nil
+        end
+
+        if not EasyMotionBindings then
+            self:Run(EasyMotionCreateBindings)
+        end
+
+        if not EasyMotionCurrentNode then
+            self:Run(EasyMotionSetStartNode)
+            if not EasyMotionCurrentNode then
+                EasyMotionInitialized = false
+                return nil
+            end
+        end
+
+        oldStart = EasyMotionCurrentNode
+        repeat
+            last = EasyMotionCurrentNode
+            name = last:GetAttribute('unit')
+
+            if (last:IsVisible() and strmatch(name, 'raid') and
+                not EasyMotionBindingLookupTable[last]) then
+                binding = EasyMotionBindings[count]
+                if binding then
+                    EasyMotionFrameLookupTable[binding] = last
+                    EasyMotionBindingLookupTable[last] = binding
+                end
+                count = count + 1
+            end
+
+            current = last
+            key = Key.Down
+            self:Run(FindClosestNode)
+            EasyMotionCurrentNode = current
+        until (EasyMotionCurrentNode == last)
+
+        current = oldStart
+        key = Key.Right
+        self:Run(FindClosestNode)
+        newStart = current
+
+        if (newStart ~= oldStart) then
+            EasyMotionCurrentNode = newStart
+            self:Run(EasyMotionAssignBindings, count)
+        end
+    ]=]
+]])
 Cursor:SetAttribute("pageupdate", [[
 	if IsEnabled then
 		self:Run(RefreshActions)
@@ -319,7 +526,20 @@ Cursor:WrapScript(ToggleCursor, "OnClick", [[
 	IsEnabled = not IsEnabled
 
 	Cursor:Run(ToggleCursor)
+	Cursor:Run(EasyMotionAssignBindings)
 	MouseHandle:SetAttribute("override", not IsEnabled)
+]])
+
+local EasyMotionStart = CreateFrame("Button", "$parentEasyMotionStart", Cursor, "SecureActionButtonTemplate")
+EasyMotionStart:RegisterForClicks("LeftButtonDown", "LeftButtonUp")
+Cursor:WrapScript(EasyMotionStart, "OnClick", [[
+    local Cursor = self:GetParent()
+
+    if down then
+        Cursor:Run(EasyMotionInputStart)
+    else
+        Cursor:Run(EasyMotionInputStop)
+    end
 ]])
 ------------------------------------------------------------------------------------------------------------------------------
 local buttons = {
@@ -343,6 +563,28 @@ for name, button in pairs(buttons) do
 		DPAD.%s = "%s"
 	]], button.binding, name))
 end
+
+local rbuttons = {
+	RUp		= {binding = "CP_R_UP", 	key = Key.RUp},
+	RDown 	= {binding = "CP_R_DOWN", 	key = Key.RDown},
+	RLeft 	= {binding = "CP_R_LEFT", 	key = Key.RLeft},
+	RRight 	= {binding = "CP_R_RIGHT",	key = Key.RRight},
+}
+
+for name, button in pairs(rbuttons) do
+	local btn = CreateFrame("Button", "$parentButton"..name, Cursor, "SecureActionButtonTemplate")
+	btn:RegisterForClicks("LeftButtonDown", "LeftButtonUp")
+	btn:SetAttribute("type", "target")
+    Cursor:WrapScript(btn, "OnClick", format([[
+        local Cursor = self:GetParent()
+        if down then
+            Cursor:Run(EasyMotionInput, %s)
+        end
+    ]], button.key))
+    Cursor:Execute(format([[
+        RKEY.%s = "%s"
+    ]], button.binding, name))
+end
 ---------------------------------------------------------------
 Cursor:SetAttribute("_onstate-unitexists", "self:Run(UpdateUnitExists, newstate)")
 ---------------------------------------------------------------
@@ -359,6 +601,170 @@ function ConsolePort:SetupRaidCursor()
 
 end
 
+-- Easy Motion Frame Stuff
+---------------------------------------------------------------
+Cursor.EasyMotion = {}
+Cursor.EasyMotion.FrameLookupTable = {}
+Cursor.EasyMotion.Key = Key
+function Cursor.EasyMotion:DisplayBinding(frameName, input)
+    local frame
+    frame = Cursor.EasyMotion.FrameLookupTable[frameName]
+
+    if not frame then
+        frame = Cursor.EasyMotion.CreateFrame(frameName)
+        Cursor.EasyMotion.FrameLookupTable[frameName] = frame
+    end
+
+    local count = 0
+    for _ in string.gmatch(input, "%S+") do
+        count = count + 1
+    end 
+
+    local x, y
+    local k = 1
+    local step = 32
+    local start = (1 - count) * (step / 2)
+    for v in string.gmatch(input, "%S+") do
+        v = tonumber(v)
+        for i=1,3 do
+            if (not frame.Keys[v][i]:IsShown()) then
+                x, y = Cursor.EasyMotion.GetFrameRelativePoint(start, k, step)
+                frame.Keys[v][i]:ClearAllPoints()
+                frame.Keys[v][i]:SetPoint("CENTER", x, y)
+                frame.Keys[v][i]:SetShown(true)
+                tinsert(frame.ShownKeys, {["key"] = v,
+                                          ["value"] = frame.Keys[v][i]})
+                break
+            end
+        end
+        k = k + 1
+    end 
+
+    frame:Show()
+end
+
+function Cursor.EasyMotion:HideBinding(frameName)
+    local frame = Cursor.EasyMotion.FrameLookupTable[frameName]
+
+    if frame then
+        for _, key in pairs(frame.Keys) do
+            for i=1,3 do
+                key[i]:SetShown(false)
+            end
+        end
+
+        frame:Hide()
+    end
+
+    wipe(frame.ShownKeys)
+end
+
+function Cursor.EasyMotion:FilterBinding(input)
+    local match, shown, hidden, i
+    local count, step, start, c, x, y
+    for _, frame in pairs(Cursor.EasyMotion.FrameLookupTable) do
+        match = true
+        shown = 0
+        for _ in pairs(frame.ShownKeys) do shown = shown + 1 end
+        hidden = 0
+        i = 1
+        for v in string.gmatch(input, "%S+") do
+            v = tonumber(v)
+            if (frame.ShownKeys[i]) then
+                if (frame.ShownKeys[i].key ~= v) then
+                    match = false
+                else
+                    frame.ShownKeys[i].value:SetShown(false)
+                    hidden = hidden + 1
+                end
+            end
+
+            i = i + 1
+        end
+
+        if not match then
+            for k, v in pairs(frame.ShownKeys) do
+                frame.ShownKeys[k].value:SetShown(false)
+            end
+        else
+            count = shown - hidden
+            step = 32
+            start = (1 - count) * (step / 2)
+            c = 1
+            for i=hidden+1,3 do
+                if (frame.ShownKeys[i]) then
+                    x, y = Cursor.EasyMotion.GetFrameRelativePoint(start, c, step)
+                    frame.ShownKeys[i].value:ClearAllPoints()
+                    frame.ShownKeys[i].value:SetPoint("CENTER", x, y)
+                    frame.ShownKeys[i].value:SetSize(32, 32)
+                    if not frame.ShownKeys[i].value.Animation then
+                        frame.ShownKeys[i].value.Animation = frame.Group:CreateAnimation("SCALE")
+                        frame.ShownKeys[i].value.Animation:SetOrigin("CENTER", x, y)
+                        frame.ShownKeys[i].value.Animation:SetScale(0.5, 0.5)
+                        frame.ShownKeys[i].value.Animation:SetDuration(0.2)
+                        frame.ShownKeys[i].value.Animation:SetSmoothing("OUT")
+                        frame.Group:SetScript('OnFinished',
+                            function()
+                                if (frame.ShownKeys[i]) then
+                                    frame.ShownKeys[i].value:SetSize(32, 32)
+                                end
+                            end)
+                        frame.Group:SetScript('OnPlay',
+                            function()
+                                if (frame.ShownKeys[i]) then
+                                    frame.ShownKeys[i].value:SetSize(64, 64)
+                                end
+                            end)
+                    end
+                    c = c + 1
+                end
+            end
+
+            frame.Group:Play()
+        end
+    end
+end
+
+function Cursor.EasyMotion.CreateFrame(frameName)
+    local bindings = {Cursor.EasyMotion.Key.RUp, Cursor.EasyMotion.Key.RDown,
+            Cursor.EasyMotion.Key.RLeft, Cursor.EasyMotion.Key.RRight}
+    -- hardcoded for now
+    local textures = {
+        "Interface\\AddOns\\ConsolePort\\Controllers\\PS4\\Icons32\\CP_R_UP",
+        "Interface\\AddOns\\ConsolePort\\Controllers\\PS4\\Icons32\\CP_R_DOWN",
+        "Interface\\AddOns\\ConsolePort\\Controllers\\PS4\\Icons32\\CP_R_LEFT",
+        "Interface\\AddOns\\ConsolePort\\Controllers\\PS4\\Icons32\\CP_R_RIGHT"
+    }
+
+    local frame = CreateFrame("Frame", "$parentEasyMotion_"..frameName, Cursor)
+    frame:SetSize(1,1)
+    frame:ClearAllPoints()
+    frame:SetPoint("CENTER", _G[frameName], "CENTER", 0, 0)
+    frame:Hide()
+    frame.Group = frame:CreateAnimationGroup()
+    frame.Keys = {}
+    frame.ShownKeys = {}
+
+    for k, v in pairs(bindings) do
+        frame.Keys[v] = {}
+        for i=1,3 do
+            frame.Keys[v][i] = frame:CreateTexture(nil, "OVERLAY")
+            frame.Keys[v][i]:SetTexture(textures[k])
+
+            frame.Keys[v][i]:SetShown(false)
+        end
+    end
+
+    return frame
+end
+
+function Cursor.EasyMotion.GetFrameRelativePoint(start, current, step)
+    return start + ((current - 1) * step), 0
+end
+
+Cursor['EasyMotionDisplay'] = Cursor.EasyMotion.DisplayBinding
+Cursor['EasyMotionHide'] = Cursor.EasyMotion.HideBinding
+Cursor['EasyMotionFilter'] = Cursor.EasyMotion.FilterBinding
 ---------------------------------------------------------------
 Cursor:SetSize(32,32)
 Cursor:SetFrameStrata("TOOLTIP")

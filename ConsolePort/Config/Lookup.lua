@@ -444,6 +444,7 @@ function ConsolePort:GetAddonBindings()
 		{name = BINDING_NAME_CP_RAIDCURSOR, binding = "CLICK ConsolePortRaidCursorToggle:LeftButton"},
 		{name = BINDING_NAME_CP_RAIDCURSOR_F, binding = "CLICK ConsolePortRaidCursorFocus:LeftButton"},
 		{name = BINDING_NAME_CP_RAIDCURSOR_T, binding = "CLICK ConsolePortRaidCursorTarget:LeftButton"},
+		{name = BINDING_NAME_CP_RAIDCURSOR_EM, binding = "CLICK ConsolePortRaidCursorEasyMotionStart:LeftButton"},
 		{name = BINDING_NAME_CP_UTILITYBELT, binding = "CLICK ConsolePortUtilityToggle:LeftButton"},
 		-- Camera
 		{name = BINDING_NAME_CP_CAMERA},

@@ -216,6 +216,7 @@ CUSTOMBINDS = {
 	CP_RAIDCURSOR			= 	"Toggle Raid Cursor",
 	CP_RAIDCURSOR_F 		= 	"Focus Raid Cursor",
 	CP_RAIDCURSOR_T 		= 	"Target Raid Cursor",
+    CP_RAIDCURSOR_EM        =   "Easy Motion Key",
 	CP_TOGGLEMOUSE			= 	"Toggle Mouse Look",
 	CP_CAMZOOMIN			= 	"Zoom In (x5)",
 	CP_CAMZOOMOUT			= 	"Zoom Out (x5)",
